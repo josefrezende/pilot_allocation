@@ -7,7 +7,7 @@ This repository contains a single Python script (`pa.py`) that implements a set 
 The script relies on a few scientific Python packages. Install them with `pip`:
 
 ```bash
-pip install numpy scipy cvxpy matplotlib
+pip install numpy scipy cvxpy
 ```
 
 The power control optimisation uses the GUROBI solver through CVXPY. A licensed installation of GUROBI is required to reproduce the numerical results.
