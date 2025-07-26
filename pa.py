@@ -1,5 +1,6 @@
 import sys
 import random
+import argparse
 random.seed(None)
 import math
 import numpy as np
@@ -11,13 +12,32 @@ from itertools import islice
 import matplotlib.pyplot as plt
 import os.path
 
+
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Pilot allocation simulation")
+    parser.add_argument("M", type=int, help="Number of APs")
+    parser.add_argument("K", type=int, help="Number of UEs")
+    parser.add_argument("P", type=int, help="Number of pilots")
+    parser.add_argument("RODADAS", type=int, help="Number of iterations")
+    return parser.parse_args()
+
+
+def solve_with_available_solver(problem):
+    """Solve a CVXPY problem using an available solver."""
+    if "GUROBI" in cp.installed_solvers():
+        return problem.solve(solver=cp.GUROBI, reoptimize=True)
+    if "ECOS_BB" in cp.installed_solvers():
+        return problem.solve(solver=cp.ECOS_BB)
+    return problem.solve(solver=cp.SCS)
+
 # valores de M (APs), K (UEs) e P (Pilotos)
-M = int(sys.argv[1])
-K = int(sys.argv[2])
-P = int(sys.argv[3])
+M = 0
+K = 0
+P = 0
 
 # numero de instancias
-RODADAS = int(sys.argv[4])
+RODADAS = 0
 
 def init_vars():
 
@@ -320,7 +340,7 @@ def ibasic ():
                         
                 if (counter[p_atual] < zeta):
                     piloto[first] = p_atual
-                    ++counter[p_atual]
+                    counter[p_atual] += 1
                     not_allocated=0
                     if piloto[first] not in usuarios_por_piloto:
                         usuarios_por_piloto[piloto[first]] = []
@@ -520,9 +540,9 @@ def escreve_arqs(rodada):
                 efile.write('\n')
                 ffile.write(str(f[(k,k_linha)]))
                 ffile.write('\n')
-    ffile.close
-    efile.close
-    rfile.close
+    ffile.close()
+    efile.close()
+    rfile.close()
     
 def calc_coeficientes (rodada):
 
@@ -571,12 +591,12 @@ def controle_de_potencia(rodada):
 
     init_target_max = 0.5
     sinr_target.value = init_target_max
-    problema.solve(solver=cp.GUROBI, reoptimize=True)
+    solve_with_available_solver(problema)
 
     while (problema.status == "optimal"):
         init_target_max = 2 * init_target_max
         sinr_target.value = init_target_max
-        problema.solve(solver=cp.GUROBI, reoptimize=True)
+        solve_with_available_solver(problema)
 
     # espaco de busca do sinr alvo
     sinr_target_min = 0
@@ -587,7 +607,7 @@ def controle_de_potencia(rodada):
 
         sinr_target.value = (sinr_target_max+sinr_target_min)/2
 
-        sol = problema.solve(solver=cp.GUROBI, reoptimize=True)
+        sol = solve_with_available_solver(problema)
 
         if problema.status == "infeasible":
             sinr_target_max = sinr_target.value
@@ -617,44 +637,59 @@ def stats(ruk,algo):
     #     line = [str(sorted_ruk[r]), str(cdf[r]/RODADAS)]
     #     cdffile.write("\t".join(line))
     #     cdffile.write("\n")
-    cdffile.close
+    cdffile.close()
     
 # main
 # inicializa as variaveis
-init_vars()
+def main():
+    global M, K, P, RODADAS
 
-# algo = OrderedDict({"maxkcut": [maxkcut, ruk_maxkcut], "random": [randomic, ruk_random], "greedy": [greedy, ruk_greedy], "basic": [basic, ruk_basic], "ibasic": [ibasic, ruk_ibasic], "wgf": [wgf, ruk_wgf], "wgfsb": [wgfsb, ruk_wgfsb]})
+    args = parse_arguments()
+    M = args.M
+    K = args.K
+    P = args.P
+    RODADAS = args.RODADAS
 
-algo = OrderedDict({"maxkcut": [maxkcut, ruk_maxkcut], "basic": [basic, ruk_basic]})
+    init_vars()
 
-for rodada in range(RODADAS):
+    # algo = OrderedDict({"maxkcut": [maxkcut, ruk_maxkcut], "random": [randomic, ruk_random], "greedy": [greedy, ruk_greedy], "basic": [basic, ruk_basic], "ibasic": [ibasic, ruk_ibasic], "wgf": [wgf, ruk_wgf], "wgfsb": [wgfsb, ruk_wgfsb]})
 
-    # reposiciona APs e UEs 
-    calc_beta()
+    algo = OrderedDict({"maxkcut": [maxkcut, ruk_maxkcut], "basic": [basic, ruk_basic]})
+
+    for rodada in range(RODADAS):
+
+        # reposiciona APs e UEs
+        calc_beta()
+
+        for a in algo:
+            algo[a][0]()
+            calc_gamma()
+            sinropt, eta = controle_de_potencia(rodada)
+            taxas = calc_taxas(eta, rodada)
+
+            algo[a][1][rodada] = taxas[0]
 
     for a in algo:
-        algo[a][0]()
-        calc_gamma()
-        sinropt, eta = controle_de_potencia(rodada)
-        taxas = calc_taxas(eta,rodada)
+        stats(algo[a][1], a)
 
-        algo[a][1][rodada] = taxas[0]
+    resultsfilename = "res_"+str(M)+"_"+str(K)+"_"+str(P)+".dat"
+    if os.path.isfile(resultsfilename):
+        resf = open(resultsfilename, 'a')
+    else:
+        resf = open(resultsfilename, 'w')
 
-for a in algo:
-    stats(algo[a][1],a)
-
-resultsfilename = "res_"+str(M)+"_"+str(K)+"_"+str(P)+".dat"
-if os.path.isfile(resultsfilename):
-    resf = open(resultsfilename, 'a')
-else:
-    resf = open(resultsfilename, 'w')
-
-for rodada in range(RODADAS):
-    line = [str(M) , str(K), str(P)]
-    resf.write("\t".join(line))
-    resf.write("\t")
-    for a in algo:
-        resf.write(str(algo[a][1][rodada]))
+    for rodada in range(RODADAS):
+        line = [str(M), str(K), str(P)]
+        resf.write("\t".join(line))
         resf.write("\t")
-    resf.write("\n")
+        for a in algo:
+            resf.write(str(algo[a][1][rodada]))
+            resf.write("\t")
+        resf.write("\n")
+
+    resf.close()
+
+
+if __name__ == "__main__":
+    main()
 
