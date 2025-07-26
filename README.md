@@ -19,7 +19,7 @@ Run the simulator from the command line passing the following four parameters:
 1. **M** – number of access points
 2. **K** – number of user equipments
 3. **P** – number of available pilot sequences
-4. **RODADAS** – number of independent simulation rounds
+4. **RUNS** – number of independent simulation rounds
 
 Example:
 
