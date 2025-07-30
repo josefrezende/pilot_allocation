@@ -27,6 +27,12 @@ Example:
 python pa.py 16 40 10 100
 ```
 
+To run the small max-min spectral efficiency demo use:
+
+```bash
+python max_min_se_cfmm.py
+```
+
 Outputs are written to text files whose names embed the parameter values. Each algorithm creates a CDF file (`cdf_M_K_P_<algo>.dat`) and the overall results are appended to `res_M_K_P.dat`.
 
 ## Algorithms
@@ -41,6 +47,7 @@ Other algorithms (random, greedy, ibasic, wgf and wgfsb) are implemented in the 
 ## Repository Contents
 
 - `pa.py` – main simulation script containing the implementation of all algorithms.
+- `max_min_se_cfmm.py` – example routine to compute the max-min spectral efficiency for a small cell-free massive MIMO setup.
 - `README.md` – this documentation file.
 
 Feel free to adapt the simulator for your experiments or extend it with additional allocation strategies.
