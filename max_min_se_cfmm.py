@@ -1,8 +1,30 @@
+"""Simplified max-min spectral efficiency routine for cell-free massive MIMO."""
+
+import argparse
 import numpy as np
 
+def rate_from_sinr(sinr):
+    """Return spectral efficiency values from SINR."""
+    return np.log2(1 + sinr)
+
 def compute_sinr(mu, A, B, sigma2):
-    """
-    Compute SINR_k = (a_k^T mu_k)^2 / (sum_i mu_i^T B_ki mu_i - (a_k^T mu_k)^2 + sigma^2)
+    """Compute the SINR for each user.
+
+    Parameters
+    ----------
+    mu : ndarray, shape (K, L)
+        Current power allocation matrix.
+    A : list of ndarray
+        Channel vectors ``a_k`` for each user ``k``.
+    B : list of list of ndarray
+        Matrices ``B_ki`` describing interference coupling.
+    sigma2 : float
+        Noise power.
+
+    Returns
+    -------
+    ndarray
+        The SINR value for each user.
     """
     K = len(A)
     SINRs = np.zeros(K)
@@ -15,10 +37,18 @@ def compute_sinr(mu, A, B, sigma2):
         SINRs[k] = num / denom
     return SINRs
 
-def wmmse_feasibility(mu_init, A, B, sigma2, Pmax, gamma_target, max_iter=50, tol=1e-3):
-    """
-    WMMSE Feasibility solver: checks if a given gamma_target is achievable
-    """
+def wmmse_feasibility(
+    mu_init,
+    A,
+    B,
+    sigma2,
+    Pmax,
+    gamma_target,
+    max_iter=50,
+    tol=1e-3,
+    step=0.01,
+):
+    """Check whether a target SINR is achievable using a simple WMMSE loop."""
     K, L = mu_init.shape
     mu = mu_init.copy()
 
@@ -39,13 +69,12 @@ def wmmse_feasibility(mu_init, A, B, sigma2, Pmax, gamma_target, max_iter=50, to
         # Step 2: Fix omega_k = 1 / e_k for all k (WMMSE weights)
         omega = 1 / e
 
-        # Step 3: ADMM-like update for mu
-        # Simplified update: gradient projection (in practice, use closed-form ADMM)
+        # Step 3: Simplified update for mu via projected gradient
         for l in range(L):
             grad = np.zeros(K)
             for k in range(K):
                 grad[k] = -2 * omega[k] * v[k] * A[k][l]
-            mu[:, l] = mu[:, l] + 0.01 * grad
+            mu[:, l] = mu[:, l] + step * grad
             norm_sq = np.sum(mu[:, l] ** 2)
             if norm_sq > Pmax:
                 mu[:, l] *= np.sqrt(Pmax / norm_sq)
@@ -78,12 +107,26 @@ def max_min_rate_wmmse(A, B, sigma2, Pmax, mu_init, gamma_min=1e-3, gamma_max=20
     return gamma_min, mu_opt
 
 
-K, L = 4, 3  # 4 users, 3 APs
-A = [np.random.rand(L) for _ in range(K)]
-B = [[np.random.rand(L, L) for _ in range(K)] for _ in range(K)]
-sigma2 = 1e-3
-Pmax = 1.0
-mu_init = np.random.rand(K, L)
+def main():
+    """Run a small randomised example for demonstration."""
+    parser = argparse.ArgumentParser(description="Max-min SINR via WMMSE")
+    parser.add_argument("K", type=int, nargs="?", default=4, help="number of users")
+    parser.add_argument("L", type=int, nargs="?", default=3, help="number of APs")
+    parser.add_argument("sigma2", type=float, nargs="?", default=1e-3, help="noise power")
+    parser.add_argument("Pmax", type=float, nargs="?", default=1.0, help="power constraint")
+    args = parser.parse_args()
 
-gamma_star, mu_opt = max_min_rate_wmmse(A, B, sigma2, Pmax, mu_init)
-print(f"Max-min SINR achieved: {gamma_star:.4f}")
+    rng = np.random.default_rng()
+    A = [rng.random(args.L) for _ in range(args.K)]
+    B = [[rng.random((args.L, args.L)) for _ in range(args.K)] for _ in range(args.K)]
+    mu_init = rng.random((args.K, args.L))
+
+    gamma_star, mu_opt = max_min_rate_wmmse(A, B, args.sigma2, args.Pmax, mu_init)
+
+    rates = rate_from_sinr(compute_sinr(mu_opt, A, B, args.sigma2))
+    print(f"Max-min SINR achieved: {gamma_star:.4f}")
+    print("Rates:", np.round(rates, 4))
+
+
+if __name__ == "__main__":  # pragma: no cover - simple CLI
+    main()
